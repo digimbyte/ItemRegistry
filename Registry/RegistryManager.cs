@@ -80,34 +80,34 @@ namespace Core.Registry
                 return;
             }
 
-            foreach (var kvp in namedBuckets)
+        foreach (var kvp in namedBuckets)
+        {
+            if (kvp.Value != null)
             {
-                if (kvp.Value != null)
-                {
-                    RegisterItem(kvp.Value);
-                    Debug.Log($"[RegistryManager] Loaded registry from bucket '{kvp.Key}': {kvp.Value.name}");
-                }
-                else
-                {
-                    Debug.LogError($"[RegistryManager] Bucket '{kvp.Key}' has null registry!");
-                }
+                RegisterItem(kvp.Value, kvp.Key);
+                Debug.Log($"[RegistryManager] Loaded registry from bucket '{kvp.Key}': {kvp.Value.name}");
             }
+            else
+            {
+                Debug.LogError($"[RegistryManager] Bucket '{kvp.Key}' has null registry!");
+            }
+        }
         }
 
 
 
-        /// <summary>
-        /// Register a Registry for use with comprehensive validation.
-        /// </summary>
-        public void RegisterItem(Registry Registry)
+    /// <summary>
+    /// Register a Registry for use with comprehensive validation.
+    /// </summary>
+    public void RegisterItem(Registry Registry, string bucketName = null)
+    {
+        if (Registry == null)
         {
-            if (Registry == null)
-            {
-                Debug.LogError("[RegistryManager] Cannot register null Registry");
-                return;
-            }
+            Debug.LogError("[RegistryManager] Cannot register null Registry");
+            return;
+        }
 
-            var regName = NormalizeRegistryName(Registry.name);
+        var regName = string.IsNullOrEmpty(bucketName) ? NormalizeRegistryName(Registry.name) : NormalizeRegistryName(bucketName);
             if (string.IsNullOrEmpty(regName))
             {
                 Debug.LogError("[RegistryManager] Registry asset has empty name; skipping registration");
@@ -154,6 +154,7 @@ namespace Core.Registry
                 globalItemCache[key] = item;
                 itemToRegistryMap[key] = Registry;
                 entryToCompositeKey[item] = key;
+                Debug.Log($"[RegistryManager] Registered composite key: '{key}'");
             }
 
             Debug.Log($"[RegistryManager] Registered Registry '{regName}' [{Registry.AssetType}] with {Registry.ItemCount} items");
@@ -193,21 +194,22 @@ namespace Core.Registry
         /// <summary>
         /// Get a item entry by UID from any loaded Registry.
         /// </summary>
-        public ItemEntry GetItemByUID(string uid)
-        {
-            if (string.IsNullOrEmpty(uid))
-                return null;
+    public ItemEntry GetItemByUID(string uid)
+    {
+        if (string.IsNullOrEmpty(uid))
+            return null;
 
-            // Prefer composite keys: "prefix/path"; check overrides first
-            if (uid.Contains("/"))
+        // Prefer composite keys: "prefix/path"; check overrides first
+        if (uid.Contains("/"))
+        {
+            if (TryParseCompositeKey(uid, out var regName, out var path))
             {
-                if (TryParseCompositeKey(uid, out var regName, out var path))
-                {
-                    var key = MakeCompositeKey(regName, path);
-                    if (overrideItemCache.TryGetValue(key, out var ovr))
-                        return ovr;
-                    if (globalItemCache.TryGetValue(key, out var e))
-                        return e;
+                var key = MakeCompositeKey(regName, path);
+                Debug.Log($"[RegistryManager] Looking up '{key}', cache has {globalItemCache.Count} keys, contains key: {globalItemCache.ContainsKey(key)}");
+                if (overrideItemCache.TryGetValue(key, out var ovr))
+                    return ovr;
+                if (globalItemCache.TryGetValue(key, out var e))
+                    return e;
 
                     // Fallback: direct lookup within the addressed registry if loaded but not cached yet
                     if (loadedRegistries.TryGetValue(regName, out var reg))
@@ -248,47 +250,107 @@ namespace Core.Registry
         /// <summary>
         /// Get a prefab by UID from any loaded Registry.
         /// </summary>
-        public GameObject GetPrefabByUID(string uid)
+    public GameObject GetPrefabByUID(string uid)
+    {
+        var entry = GetItemByUID(uid);
+        if (entry != null)
+            return entry.asset as GameObject;
+        
+        // If not found and uid has registry prefix, return that registry's default
+        if (!string.IsNullOrEmpty(uid) && uid.Contains("/"))
         {
-            var entry = GetItemByUID(uid);
-            return entry?.asset as GameObject;
+            if (TryParseCompositeKey(uid, out var regName, out _))
+            {
+                if (loadedRegistries.TryGetValue(regName, out var reg))
+                    return reg.DefaultAsset as GameObject;
+            }
         }
+        return null;
+    }
 
         /// <summary>
         /// Get a texture by UID from any loaded Registry.
         /// </summary>
-        public Texture GetTextureByUID(string uid)
+    public Texture GetTextureByUID(string uid)
+    {
+        var entry = GetItemByUID(uid);
+        if (entry != null)
+            return entry.asset as Texture;
+        
+        // If not found and uid has registry prefix, return that registry's default
+        if (!string.IsNullOrEmpty(uid) && uid.Contains("/"))
         {
-            var entry = GetItemByUID(uid);
-            return entry?.asset as Texture;
+            if (TryParseCompositeKey(uid, out var regName, out _))
+            {
+                if (loadedRegistries.TryGetValue(regName, out var reg))
+                    return reg.DefaultAsset as Texture;
+            }
         }
+        return null;
+    }
 
         /// <summary>
         /// Get a material by UID from any loaded Registry.
         /// </summary>
-        public Material GetMaterialByUID(string uid)
+    public Material GetMaterialByUID(string uid)
+    {
+        var entry = GetItemByUID(uid);
+        if (entry != null)
+            return entry.asset as Material;
+        
+        // If not found and uid has registry prefix, return that registry's default
+        if (!string.IsNullOrEmpty(uid) && uid.Contains("/"))
         {
-            var entry = GetItemByUID(uid);
-            return entry?.asset as Material;
+            if (TryParseCompositeKey(uid, out var regName, out _))
+            {
+                if (loadedRegistries.TryGetValue(regName, out var reg))
+                    return reg.DefaultAsset as Material;
+            }
         }
+        return null;
+    }
 
         /// <summary>
         /// Get a mesh by UID from any loaded Registry.
         /// </summary>
-        public Mesh GetMeshByUID(string uid)
+    public Mesh GetMeshByUID(string uid)
+    {
+        var entry = GetItemByUID(uid);
+        if (entry != null)
+            return entry.asset as Mesh;
+        
+        // If not found and uid has registry prefix, return that registry's default
+        if (!string.IsNullOrEmpty(uid) && uid.Contains("/"))
         {
-            var entry = GetItemByUID(uid);
-            return entry?.asset as Mesh;
+            if (TryParseCompositeKey(uid, out var regName, out _))
+            {
+                if (loadedRegistries.TryGetValue(regName, out var reg))
+                    return reg.DefaultAsset as Mesh;
+            }
         }
+        return null;
+    }
 
         /// <summary>
         /// Get an audio clip by UID from any loaded Registry.
         /// </summary>
-        public AudioClip GetAudioByUID(string uid)
+    public AudioClip GetAudioByUID(string uid)
+    {
+        var entry = GetItemByUID(uid);
+        if (entry != null)
+            return entry.asset as AudioClip;
+        
+        // If not found and uid has registry prefix, return that registry's default
+        if (!string.IsNullOrEmpty(uid) && uid.Contains("/"))
         {
-            var entry = GetItemByUID(uid);
-            return entry?.asset as AudioClip;
+            if (TryParseCompositeKey(uid, out var regName, out _))
+            {
+                if (loadedRegistries.TryGetValue(regName, out var reg))
+                    return reg.DefaultAsset as AudioClip;
+            }
         }
+        return null;
+    }
 
         /// <summary>
         /// Get a typed asset by UID with generic type parameter.
@@ -545,9 +607,9 @@ namespace Core.Registry
             if (namedBuckets == null)
                 namedBuckets = new SerializableDictionary<string, Registry>();
 
-            namedBuckets[bucketName] = registry;
-            RegisterItem(registry);
-            Debug.Log($"[RegistryManager] Added registry '{registry.name}' to bucket '{bucketName}'");
+        namedBuckets[bucketName] = registry;
+        RegisterItem(registry, bucketName);
+        Debug.Log($"[RegistryManager] Added registry '{registry.name}' to bucket '{bucketName}'");
         }
 
         /// <summary>

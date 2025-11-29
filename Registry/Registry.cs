@@ -398,7 +398,18 @@ namespace Core.Registry
             // Validate default asset matches registry type
             if (defaultAsset != null && !ValidateAssetType(defaultAsset))
             {
-                Debug.LogError($"[{assetType}Registry] Default asset type mismatch! Expected {assetType}, got {defaultAsset.GetType().Name}");
+                Debug.LogError($"[{assetType}Registry] Default asset type mismatch! Expected {assetType}, got {defaultAsset.GetType().Name}. Clearing invalid default asset.");
+#if UNITY_EDITOR
+                // Defer the clearing to avoid serialization issues during OnValidate
+                UnityEditor.EditorApplication.delayCall += () =>
+                {
+                    if (this != null && defaultAsset != null && !ValidateAssetType(defaultAsset))
+                    {
+                        defaultAsset = null;
+                        UnityEditor.EditorUtility.SetDirty(this);
+                    }
+                };
+#endif
             }
         }
 
